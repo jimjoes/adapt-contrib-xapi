@@ -103,6 +103,15 @@
                   "validators": [],
                   "help": "The 'user' or 'key' as defined in your Learning Record Store (LRS)."
                 },
+                "_authCookie": {
+                  "type": "string",
+                  "required": false,
+                  "title": "Cookie to use as auth token",
+                  "default": "",
+                  "inputType": "Text",
+                  "validators": [],
+                  "help": "The name of the cookie that will be used as the auth token for requests."
+                },
                 "_password": {
                   "type": "string",
                   "required": true,
