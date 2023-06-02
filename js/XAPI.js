@@ -270,7 +270,7 @@ class XAPI extends Backbone.Model {
       this.set({
         registration: this.getLRSAttribute("registration"),
         actor: {
-          mbox: payload.email,
+          mbox: `mailto:${payload.email}`,
           name: `${payload.given_name} ${payload.family_name}`,
         },
       });
