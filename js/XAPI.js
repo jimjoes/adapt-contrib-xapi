@@ -13,6 +13,20 @@ function getCookie(name) {
   if (parts.length === 2) return parts.pop().split(";").shift();
 }
 
+function base64UrlDecode(base64Url) {
+  const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+  const jsonPayload = decodeURIComponent(
+    atob(base64)
+      .split("")
+      .map(function (c) {
+        return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
+      })
+      .join("")
+  );
+
+  return JSON.parse(jsonPayload);
+}
+
 class XAPI extends Backbone.Model {
   preinitialize() {
     // Declare defaults and model properties
@@ -244,11 +258,29 @@ class XAPI extends Backbone.Model {
     // Set any attributes on the xAPIWrapper.
     this.setWrapperConfig();
 
-    // Set the LRS specific properties.
-    this.set({
-      registration: this.getLRSAttribute("registration"),
-      actor: this.getLRSAttribute("actor"),
-    });
+    const authTokenCookieName = this.getConfig("_authCookie");
+
+    if (authTokenCookieName) {
+      const authToken = getCookie(authTokenCookieName);
+      console.log("authToken", authToken);
+      // this.xapiWrapper.changeConfig({ auth: authToken });
+      const parts = authToken.split(".");
+      const payload = base64UrlDecode(parts[1]);
+      console.log("payload", payload);
+      this.set({
+        registration: this.getLRSAttribute("registration"),
+        actor: {
+          mbox: payload.email,
+          name: `${payload.given_name} ${payload.family_name}`,
+        },
+      });
+    } else {
+      // Set the LRS specific properties
+      this.set({
+        registration: this.getLRSAttribute("registration"),
+        actor: this.getLRSAttribute("actor"),
+      });
+    }
 
     this.xapiWrapper.strictCallbacks = true;
   }
@@ -1209,6 +1241,8 @@ class XAPI extends Backbone.Model {
             registration,
             null,
             (error, xhr) => {
+              console.log("error: ", error);
+              console.log("xhr: ", xhr);
               if (error) {
                 logging.warn(
                   `adapt-contrib-xapi: getState() failed for ${activityId} (${type})`
@@ -1241,7 +1275,7 @@ class XAPI extends Backbone.Model {
               }
 
               // Check for empty response, otherwise the subsequent JSON.parse() will fail.
-              if (xhr.response === "") {
+              if (xhr.response === "" || !xhr.response) {
                 return resolve();
               }
 
@@ -1471,6 +1505,7 @@ class XAPI extends Backbone.Model {
     if (!attachments && statement.attachments) {
       return await this.processAttachments(statement);
     }
+
     await this.onStatementReady(statement, attachments);
   }
 
@@ -1494,16 +1529,16 @@ class XAPI extends Backbone.Model {
       ? "include"
       : "omit";
 
-    let authToken;
-    const authTokenCookieName = this.getConfig("_authCookie");
+    // let authToken;
+    // const authTokenCookieName = this.getConfig("_authCookie");
 
-    if (authTokenCookieName) {
-      authToken = getCookie(authTokenCookieName);
-    }
+    // if (authTokenCookieName) {
+    //     authToken = getCookie(authTokenCookieName);
+    // }
 
     const headers = {
       "Content-Type": "application/json",
-      Authorization: authToken ? authToken : lrs.auth,
+      Authorization: lrs.auth,
       "X-Experience-API-Version": window.ADL.XAPIWrapper.xapiVersion,
     };
 
@@ -1566,6 +1601,7 @@ class XAPI extends Backbone.Model {
    */
   async onStatementReady(statement, attachments) {
     const sendStatementCallback = (error, res, body) => {
+      console.log("error in onStatementReady: ", error);
       if (error) {
         Adapt.trigger("xapi:lrs:sendStatement:error", error);
         throw error;
@@ -1574,11 +1610,15 @@ class XAPI extends Backbone.Model {
       Adapt.trigger("xapi:lrs:sendStatement:success", body);
     };
 
-    this.xapiWrapper.sendStatement(
-      statement,
-      sendStatementCallback,
-      attachments
-    );
+    try {
+      this.xapiWrapper.sendStatement(
+        statement,
+        sendStatementCallback,
+        attachments
+      );
+    } catch (error) {
+      console.log("send statement error: ", error);
+    }
   }
 
   /**
